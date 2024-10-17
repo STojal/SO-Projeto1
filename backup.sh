@@ -2,7 +2,7 @@
 
 #TODO
 # - check if backup directory is not inside working directory
-# - check modification dates of files
+
 
 Help(){
     echo "Run this script to create a backup for a directory."
@@ -52,13 +52,12 @@ else
     exit 1
 fi
 
-#check to see if the backupt directory isnt inside the pwd directory
+# check if backup exists and create it in case it doesn't
 checkifparent=$(find "$pwd" -type d -wholename "$backup_dir")
 if [[ -n $checkifparent ]]; then
     echo "Cant do backup in the original directory"
     exit 1
 else 
-    # check if backup exists and create it in case it doesn't
     if [[ -d "$backup_dir" ]]; then
         echo "Backup directory is valid!"
     else
@@ -72,14 +71,15 @@ fi
 
 # loop through files in the source directory
 for path in "$pwd"/*; do
-    if [[ -f $path ]]; then
-        echo "cp $path $backup_dir"  # always show the command
+        echo "cp $path $backup_dir"  # always show the command        
 
+        if [[ -d $path ]]; then
+            echo "$pwd exists and is a directory!"
+        else
         # if check is false, actually copy the file
         if [[ "$check" == false ]]; then
             cp "$path" "$backup_dir"
         fi
-    fi
 done
 
 echo "backup finished!"
