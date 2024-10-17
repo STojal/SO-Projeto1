@@ -1,5 +1,9 @@
 #!/bin/bash
 
+#TODO
+# - check if backup directory is not inside working directory
+# - check modification dates of files
+
 Help(){
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -15,7 +19,7 @@ while getopts 'ch' opt; do
     case $opt in
     c)
         echo "Processing option -c (dry run, no copying)"
-        check=true  # Set check to true when -c is passed
+        check=true  # set check to true when -c is passed
         ;;
     h)
         Help
@@ -68,3 +72,5 @@ for path in "$pwd"/*; do
         fi
     fi
 done
+
+echo "backup finished!"
