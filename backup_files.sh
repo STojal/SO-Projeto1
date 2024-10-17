@@ -53,13 +53,22 @@ else
     exit 1
 fi
 
-# check if backup exists and create it in case it doesn't
-if [[ -d $backup_dir ]]; then
-    echo "Backup directory is valid!"
-else
-    echo "Creating backup directory..."
-    mkdir -p "$backup_dir"
-    echo "$backup_dir directory was created successfully!"
+#check to see if the backupt directory isnt inside the pwd directory
+checkifparent=$(find "$pwd" -type d -wholename "$backup_dir")
+if [[ -n $checkifparent ]]; then
+    echo "Cant do backup in the original directory"
+    exit 1
+else 
+    # check if backup exists and create it in case it doesn't
+    if [[ -d "$backup_dir" ]]; then
+        echo "Backup directory is valid!"
+    else
+        echo "Creating backup directory..."
+        if [[ "$check" == false ]]; then
+            mkdir -p "$backup_dir"
+        fi
+        echo "$backup_dir directory was created successfully!"
+    fi
 fi
 backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
