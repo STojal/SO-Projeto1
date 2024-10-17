@@ -3,7 +3,6 @@
 #TODO
 # - check if backup directory is not inside working directory
 
-
 Help(){
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -12,79 +11,98 @@ Help(){
     echo "r     only copy the files and directories that match the regex expression"
 }
 
+options=()
 check=false
 
-# parse options
+# Parse options
 while getopts 'ch' opt; do
     case $opt in
-    c)
-        echo "Processing option -c (dry run, no copying)"
-        check=true  # set check to true when -c is passed
-        ;;
-    h)
-        Help
-        exit 0
-        ;;
-    ?)
-        echo "Error: invalid command option"
-        Help
-        exit 1
-        ;;
+        c)
+            check=true  # set check to true when -c is passed
+            options+=("-c")
+            ;;
+        h)
+            Help
+            exit 0
+            ;;
+        ?)
+            echo "Error: invalid command option"
+            Help
+            exit 1
+            ;;
     esac
 done
 shift "$(($OPTIND -1))"
 
-if [[ $# -ne 2 ]];then
+if [[ $# -ne 2 ]]; then
     echo "Error: invalid number of arguments"
     Help
     exit 1
 fi
 
-# argument variables
-pwd=$1
-backup_dir=$2
+# Argument variables
+working_dir="$1"
+backup_dir="$2"
 
-# check if working directory exists
-if [[ -d $pwd ]]; then
-    echo "$pwd exists and is a directory!"
+# Check if working directory exists
+if [[ -d $working_dir ]]; then
+    echo "$working_dir exists and is a directory!"
 else
-    echo "$pwd is not a directory"
+    echo "$working_dir is not a directory"
     exit 1
 fi
 
-# check if backup exists and create it in case it doesn't
-checkifparent=$(find "$pwd" -type d -wholename "$backup_dir")
-if [[ -n $checkifparent ]]; then
-    echo "Cant do backup in the original directory"
+backup_dir="${backup_dir%/}" # Remove the trailing slash from the string
+
+# Check if backup directory is not inside the working directory
+if [[ "$backup_dir" == "$working_dir"* ]]; then
+    echo "Cannot backup in the original directory."
     exit 1
-else 
-    if [[ -d "$backup_dir" ]]; then
-        echo "Backup directory is valid!"
-    else
-        echo "Creating backup directory..."
-        if [[ "$check" == false ]]; then
-            mkdir -p "$backup_dir"
-        fi
-        echo "$backup_dir directory was created successfully!"
+fi
+
+# Check if backup exists and create it if it doesn't
+if [[ -d "$backup_dir" ]]; then
+    echo "Backup directory is valid!"
+else
+    echo "Creating backup directory..."
+    if [[ "$check" == false ]]; then
+        mkdir -p "$backup_dir"
     fi
+    echo "$backup_dir directory was created successfully!"
 fi
 
-# loop through files in the source directory
-for path in "$pwd"/*; do
-        echo "cp $path $backup_dir"  # always show the command  
+# Loop through files in the source directory
+for path in "$working_dir"/*; do
+    pathname=$(basename "$path")
 
-        #check to see if it is a directory
-        if [[ -d $path ]]; then
-            if [[ "$check" == false ]]; then
-                ./backup.sh
-            else
-                ./backup.sh -c
-            fi
-        fi
-        # if check is false, actually copy the file
+    # Check to see if it is a directory
+    if [[ -d $path ]]; then
+        echo "mkdir -p \"$backup_dir/$pathname\""
+        echo "./backup.sh ${options[@]} \"$path\" \"$backup_dir/$pathname\""
         if [[ "$check" == false ]]; then
-            cp "$path" "$backup_dir"
+            mkdir -p "$backup_dir/$pathname"
+            # Call the script recursively
+            ./backup.sh "${options[@]}" "$path" "$backup_dir/$pathname"
         fi
+        continue
+    fi
+
+    echo "cp \"$path\" \"$backup_dir\""  # always show the command 
+    # If check is false, actually copy the file
+    if [[ "$check" == false ]]; then
+        cp "$path" "$backup_dir"
+    fi
 done
 
-echo "backup finished!"
+for backup_path in "$backup_dir"/*; do
+    backup_filename=$(basename "$backup_path") 
+
+    # remove file if it doesn't exist in the working directory
+    if [[ ! -e "$pwd/$backup_filename" ]]; then
+        echo "rm -r $backup_path"  
+
+        if [[ "$check" == false ]]; then
+            rm -r "$backup_path"
+        fi
+    fi
+done
