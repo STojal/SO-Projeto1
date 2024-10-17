@@ -76,7 +76,7 @@ for path in "$pwd"/*; do
         fi
 
         echo "cp $path $backup_dir"  # always show the command
-
+DWEFV
         # if check is false, actually copy the file
         if [[ "$check" == false ]]; then
             cp -a "$path" "$backup_dir"
