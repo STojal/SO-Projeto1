@@ -61,6 +61,7 @@ else
     mkdir -p "$backup_dir"
     echo "$backup_dir directory was created successfully!"
 fi
+backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
 # loop through files in the source directory
 for path in "$pwd"/*; do
@@ -69,7 +70,8 @@ for path in "$pwd"/*; do
         filename=$(basename $path)
 
         # check modification date
-        if [[ -e "$backup_dir/$path" && "$path" -nt "$backup_dir/$filename"]]; then
+        if [[ -e "$backup_dir/$path" \
+        && ! "$path" -nt "$backup_dir/$filename" ]]; then
             continue
         fi
 
@@ -82,5 +84,20 @@ for path in "$pwd"/*; do
 
     fi
 done
+
+for backup_path in "$backup_dir"/*; do
+    backup_filename=$(basename "$backup_path") 
+
+    # remove file if it doesn't exist in the working directory
+    if [[ ! -e "$pwd/$backup_filename" ]]; then
+        echo "rm $backup_path"  
+
+        if [[ "$check" == false ]]; then
+            rm "$backup_path"
+        fi
+    fi
+done
+
+
 
 echo "backup finished!"
