@@ -71,11 +71,16 @@ fi
 
 # loop through files in the source directory
 for path in "$pwd"/*; do
-        echo "cp $path $backup_dir"  # always show the command        
+        echo "cp $path $backup_dir"  # always show the command  
 
+        #check to see if it is a directory
         if [[ -d $path ]]; then
-            echo "$pwd exists and is a directory!"
-        else
+            if [[ "$check" == false ]]; then
+                ./backup.sh
+            else
+                ./backup.sh -c
+            fi
+        fi
         # if check is false, actually copy the file
         if [[ "$check" == false ]]; then
             cp "$path" "$backup_dir"
