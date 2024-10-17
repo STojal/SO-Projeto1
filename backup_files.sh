@@ -3,6 +3,7 @@
 #TODO
 # - check if backup directory is not inside working directory
 # - check modification dates of files
+# - when a file is erased on the working directory, its also erased in the backup
 
 Help(){
     echo "Run this script to create a backup for a directory."
@@ -60,17 +61,43 @@ else
     mkdir -p "$backup_dir"
     echo "$backup_dir directory was created successfully!"
 fi
+backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
 # loop through files in the source directory
 for path in "$pwd"/*; do
     if [[ -f $path ]]; then
+
+        filename=$(basename $path)
+
+        # check modification date
+        if [[ -e "$backup_dir/$path" \
+        && ! "$path" -nt "$backup_dir/$filename" ]]; then
+            continue
+        fi
+
         echo "cp $path $backup_dir"  # always show the command
 
         # if check is false, actually copy the file
         if [[ "$check" == false ]]; then
-            cp "$path" "$backup_dir"
+            cp -a "$path" "$backup_dir"
+        fi
+
+    fi
+done
+
+for backup_path in "$backup_dir"/*; do
+    backup_filename=$(basename "$backup_path") 
+
+    # remove file if it doesn't exist in the working directory
+    if [[ ! -e "$pwd/$backup_filename" ]]; then
+        echo "rm $backup_path"  
+
+        if [[ "$check" == false ]]; then
+            rm "$backup_path"
         fi
     fi
 done
+
+
 
 echo "backup finished!"
