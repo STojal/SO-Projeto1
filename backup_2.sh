@@ -1,6 +1,7 @@
 #!/bin/bash
 
 #TODO
+# - check if backup directory is not inside working directory
 # - check modification dates of files
 # - when a file is erased on the working directory, its also erased in the backup
 
@@ -13,28 +14,17 @@ Help(){
 }
 
 check=false
-regex=""
-options=()
 
-# parsing options
-while getopts 'cr:h' opt; do
+# parse options
+while getopts 'ch' opt; do
     case $opt in
     c)
-        check=true
-        options+=("-c")
-        ;;
-    r)  
-        regex="$OPTARG"
-        options+=("-r ${OPTARG}")
+        echo "Processing option -c (dry run, no copying)"
+        check=true  # set check to true when -c is passed
         ;;
     h)
         Help
         exit 0
-        ;;
-    :)
-        echo "Error: option argument was not provided"
-        Help
-        exit 1
         ;;
     ?)
         echo "Error: invalid command option"
@@ -52,20 +42,19 @@ if [[ $# -ne 2 ]];then
 fi
 
 # argument variables
-working_dir=$1
+pwd=$1
 backup_dir=$2
 
 # check if working directory exists
-if [[ -d $working_dir ]]; then
-    echo "$working_dir exists and is a directory!"
+if [[ -d $pwd ]]; then
+    echo "$pwd exists and is a directory!"
 else
-    echo "$working_dir is not a directory"
+    echo "$pwd is not a directory"
     exit 1
 fi
-backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
 #check to see if the backupt directory isnt inside the pwd directory
-checkifparent=$(find "$working_dir" -type d -wholename "$backup_dir")
+checkifparent=$(find "$pwd" -type d -wholename "$backup_dir")
 if [[ -n $checkifparent ]]; then
     echo "Cant do backup in the original directory"
     exit 1
@@ -81,54 +70,42 @@ else
         echo "$backup_dir directory was created successfully!"
     fi
 fi
+backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
 # loop through files in the source directory
-for path in "$working_dir"/*; do
-    
-    basename=$(basename $path)
+for path in "$pwd"/*; do
     if [[ -f $path ]]; then
 
+        filename=$(basename $path)
+
         # check modification date
-        if [[ -f "$backup_dir/$basename" ]] && ! [[ "$path" -nt "$backup_dir/$basename" ]]; then
+        if [[ -e "$backup_dir/$path" \
+        && ! "$path" -nt "$backup_dir/$filename" ]]; then
             continue
         fi
 
         echo "cp $path $backup_dir"  # always show the command
 
+        # if check is false, actually copy the file
         if [[ "$check" == false ]]; then
             cp -a "$path" "$backup_dir"
         fi
 
-    elif [[ -d $path ]]; then
-
-        if [[ -d "$backup_dir/$basename" ]] && ! [[ $path -nt "$backup_dir/$basename" ]]; then
-            continue
-        fi
-        
-        if ! [[ -d "$backup_dir/$basename" ]]; then
-            echo "mkdir -p $backup_dir/$basename"
-            if ! [[ check ]]; then
-                mkdir -p "$backup_dir/$basename"
-            fi
-        fi
-
-        ./backup.sh "${options[@]}" "$path" "$backup_dir/$basename"
-    
     fi
 done
 
-# for backup_path in "$backup_dir"/*; do
-#     backup_filename=$(basename "$backup_path") 
+for backup_path in "$backup_dir"/*; do
+    backup_filename=$(basename "$backup_path") 
 
-#     # remove file if it doesn't exist in the working directory
-#     if [[ ! -e "$working_dir/$backup_filename" ]]; then
-#         echo "rm $backup_path"  
+    # remove file if it doesn't exist in the working directory
+    if [[ ! -e "$pwd/$backup_filename" ]]; then
+        echo "rm $backup_path"  
 
-#         if [[ "$check" == false ]]; then
-#             rm "$backup_path"
-#         fi
-#     fi
-# done
+        if [[ "$check" == false ]]; then
+            rm "$backup_path"
+        fi
+    fi
+done
 
 
 
