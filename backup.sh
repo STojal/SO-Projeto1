@@ -35,11 +35,11 @@ while getopts 'cr:hb:' opt; do
         if [ -f "$file_name" ]; then 
             echo "File exists"
             echo "Processing option -b file name $file_name"
-            options+=("-b ${file_name}")
+            options+=("-b" "${file_name}")
 
             file_use=true
         else 
-            echo "File doesnt exist prociding normal"
+            echo "File  $file_name doesnt exist prociding normal"
         fi
 
         
