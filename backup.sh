@@ -29,13 +29,14 @@ while getopts 'cr:hb:' opt; do
         ;;
     b)
          
-        options+=("-b ${OPTARG}")
         file_name=${OPTARG}
         #check if file exists 
         echo "Checking file"
         if [ -f "$file_name" ]; then 
             echo "File exists"
             echo "Processing option -b file name $file_name"
+            options+=("-b ${file_name}")
+
             file_use=true
         else 
             echo "File doesnt exist prociding normal"
@@ -120,7 +121,7 @@ for path in "$working_dir"/*; do
         if [[ "$arrayEmpty" == false ]]; then
             #check if the fileTOremove is eual to the atual path
             for fileRemove in "${arrayFiles[@]}"; do 
-                if [[ "$fileRemove" == "$filename" ]]; then
+                if [[ "$fileRemove" == "$basename" ]]; then
                     echo "O ficheiro $path nao vai ser copiado"
                     continue 2
                 fi 
@@ -161,7 +162,7 @@ for path in "$working_dir"/*; do
             fi
         fi
 
-        ./Teste.sh "${options[@]}" "$path" "$backup_dir/$basename"
+        ./backup.sh "${options[@]}" "$path" "$backup_dir/$basename"
         echo "backup finished for the directorio $path!"
 
     fi
