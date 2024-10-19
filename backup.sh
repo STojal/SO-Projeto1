@@ -1,10 +1,9 @@
 #!/bin/bash
 
-#TODO
-# - check modification dates of files
-# - when a file is erased on the working directory, its also erased in the backup
+CHECK=false
+REGEX=""
 
-Help(){
+Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
     echo "c     only see the output of the script without actually copying anything"
@@ -12,20 +11,112 @@ Help(){
     echo "r     only copy the files and directories that match the regex expression"
 }
 
-check=false
-regex=""
-options=()
+backup_copy() {
+    local working_dir=$1
+    local backup_dir=$2
+
+    for path in "$working_dir"/*; do
+
+        # make sure path exists
+        if [[ ! -e $path ]]; then
+            echo "skipping $working_dir - nothing found"
+            return
+        fi
+
+        # get basename of path for later
+        local basename=$(basename "$path")
+
+        # check if regex matches basename
+        if [[ -n "$REGEX" && ! "$basename" =~ $REGEX ]]; then
+            echo "skipping $path - doesn't match regex"
+            continue
+        fi
+
+        # if path is a file
+        if [[ -f "$path" ]]; then
+            # check modification date
+            if [[ -f "$backup_dir/$basename" \
+            && ! "$path" -nt "$backup_dir/$basename" ]]; then
+                echo "skipping $path - no new changes"
+                continue
+            fi
+
+            # copy the file
+            echo "cp $path $backup_dir"
+            if [[ "$CHECK" == false ]]; then
+                cp "$path" "$backup_dir"
+            fi
+
+        # if path is directory
+        elif [[ -d "$path" ]]; then
+
+            # check if directory exists in backup, and make one if not
+            if [[ ! -d "$backup_dir/$basename" ]]; then
+                echo "mkdir $backup_dir/$basename"
+                if [[ "$CHECK" == false ]]; then
+                    mkdir "$backup_dir/$basename"
+                fi
+            fi
+            
+            backup_copy "$path" "$backup_dir/$basename"
+        fi
+    done
+}
+
+backup_remove(){
+    local working_dir=$1
+    local backup_dir=$2
+
+    for backup_path in $backup_dir/*; do
+
+        local basename=$(basename $backup_path)
+
+        # if path is file
+        if [[ -f "$backup_path" ]]; then
+
+            # if file still exists in working directory
+            if [[ ! -f "$working_dir/$basename" ]]; then
+                echo "rm $backup_path"
+                if [[ "$CHECK" == false ]]; then
+                    rm "$backup_path"
+                fi
+            fi
+        
+        # if path is directory
+        elif [[ -d "$backup_path" ]]; then
+            
+            
+            # remove all contents of directory that no longer exist in working directory
+            backup_remove "$working_dir/$basename" "$backup_path"
+            # this makes sure the directory is empty if it needs to be removed
+
+            # check if directory still exists in working directory
+            if [[ ! -d "$working_dir/$basename" ]]; then
+                echo "rmdir $backup_dir/$basename"
+
+                # remove directory in backup
+                if [[ "$CHECK" == false ]]; then
+                    rmdir "$backup_dir/$basename"
+                fi
+            fi
+            
+        fi
+
+
+    done
+
+}
 
 # parsing options
 while getopts 'cr:h' opt; do
     case $opt in
     c)
-        check=true
-        options+=("-c")
+        echo "(dry run, no changes)"
+        CHECK=true
         ;;
     r)  
-        regex="$OPTARG"
-        options+=("-r ${OPTARG}")
+        REGEX="$OPTARG"
+        echo "regex = $REGEX"
         ;;
     h)
         Help
@@ -45,7 +136,7 @@ while getopts 'cr:h' opt; do
 done
 shift "$(($OPTIND -1))"
 
-if [[ $# -ne 2 ]];then
+if [[ $# -ne 2 ]]; then
     echo "Error: invalid number of arguments"
     Help
     exit 1
@@ -56,80 +147,33 @@ working_dir=$1
 backup_dir=$2
 
 # check if working directory exists
-if [[ -d $working_dir ]]; then
-    echo "$working_dir exists and is a directory!"
-else
+if [[ ! -d $working_dir ]]; then
     echo "$working_dir is not a directory"
     exit 1
 fi
+
 backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
-#check to see if the backupt directory isnt inside the pwd directory
-checkifparent=$(find "$working_dir" -type d -wholename "$backup_dir")
-if [[ -n $checkifparent ]]; then
-    echo "Cant do backup in the original directory"
+# Check if backup directory is inside the working directory
+if [[ "$backup_dir" == "$working_dir"* ]]; then
+    echo "Cannot do backup in the original directory"
     exit 1
-else 
-    # check if backup exists and create it in case it doesn't
-    if [[ -d "$backup_dir" ]]; then
-        echo "Backup directory is valid!"
-    else
-        echo "Creating backup directory..."
-        if [[ "$check" == false ]]; then
-            mkdir -p "$backup_dir"
-        fi
-        echo "$backup_dir directory was created successfully!"
-    fi
 fi
 
-# loop through files in the source directory
-for path in "$working_dir"/*; do
-    
-    basename=$(basename $path)
-    if [[ -f $path ]]; then
-
-        # check modification date
-        if [[ -f "$backup_dir/$basename" ]] && ! [[ "$path" -nt "$backup_dir/$basename" ]]; then
-            continue
-        fi
-
-        echo "cp $path $backup_dir"  # always show the command
-
-        if [[ "$check" == false ]]; then
-            cp -a "$path" "$backup_dir"
-        fi
-
-    elif [[ -d $path ]]; then
-
-        if [[ -d "$backup_dir/$basename" ]] && ! [[ $path -nt "$backup_dir/$basename" ]]; then
-            continue
-        fi
-        
-        if ! [[ -d "$backup_dir/$basename" ]]; then
-            echo "mkdir -p $backup_dir/$basename"
-            if ! [[ check ]]; then
-                mkdir -p "$backup_dir/$basename"
-            fi
-        fi
-
-        ./backup.sh "${options[@]}" "$path" "$backup_dir/$basename"
-    
+# Check if backup exists and create it if it doesn't
+if [[ -d "$backup_dir" ]]; then
+    echo "Backup directory is valid!"
+else
+    echo "Creating backup directory..."
+    if [[ "$CHECK" == false ]]; then
+        backup_dir=../$backup_dir
+        mkdir -p "$backup_dir"
     fi
-done
+    echo "$backup_dir directory was created successfully!"
+fi
 
-# for backup_path in "$backup_dir"/*; do
-#     backup_filename=$(basename "$backup_path") 
+backup_copy "$working_dir" "$backup_dir"
 
-#     # remove file if it doesn't exist in the working directory
-#     if [[ ! -e "$working_dir/$backup_filename" ]]; then
-#         echo "rm $backup_path"  
+backup_remove "$working_dir" "$backup_dir"
 
-#         if [[ "$check" == false ]]; then
-#             rm "$backup_path"
-#         fi
-#     fi
-# done
-
-
-
-echo "backup finished!"
+echo "Backup finished!"

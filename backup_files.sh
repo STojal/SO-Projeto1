@@ -81,7 +81,7 @@ for path in "$working_dir"/*; do
         filename=$(basename $path)
 
         # check modification date
-        if [[ -e "$backup_dir/$path" \
+        if [[ -f "$backup_dir/$path" \
         && ! "$path" -nt "$backup_dir/$filename" ]]; then
             continue
         fi
