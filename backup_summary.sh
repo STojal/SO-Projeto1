@@ -1,5 +1,22 @@
 #!/bin/bash
 
+
+# option global variables
+CHECK=false
+REGEX=""
+
+# warning global variables
+ERRORS=0
+WARNINGS=0
+
+UPDATES=0
+
+COPIES=0
+COPIES_SIZE=0
+
+DELETES=0
+DELETES_SIZE=0
+
 Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -42,6 +59,14 @@ backup_copy() {
 
             # copy the file
             echo "cp -a $path $backup_dir"
+            
+            # add information
+            if [[ -f $backup_dir/$basename ]]; then
+                (( UPDATES++ ))
+            else
+                (( COPIES++ ))
+                (( COPIES_SIZE+=$(stat -c%s "$path")  ))
+            fi
 
             if [[ "$CHECK" == false ]]; then
                 cp -a "$path" "$backup_dir"
@@ -77,7 +102,8 @@ backup_remove(){
             # if file still exists in working directory
             if [[ ! -f "$working_dir/$basename" ]]; then
                 echo "rm $backup_path"
-                
+                (( DELETES++ ))
+                (( DELETES_SIZE+=$(stat -c%s "$backup_path")  ))
                 if [[ "$CHECK" == false ]]; then
                     rm "$backup_path"
                 fi
