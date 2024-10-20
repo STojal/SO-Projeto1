@@ -14,6 +14,7 @@ Help(){
 }
 
 check=false
+options=()
 
 # parse options
 while getopts 'ch' opt; do
@@ -21,6 +22,7 @@ while getopts 'ch' opt; do
     c)
         echo "Processing option -c (dry run, no copying)"
         check=true  # set check to true when -c is passed
+        options+=("-c")
         ;;
     h)
         Help
@@ -42,19 +44,19 @@ if [[ $# -ne 2 ]];then
 fi
 
 # argument variables
-pwd=$1
+working_dir=$1
 backup_dir=$2
 
 # check if working directory exists
-if [[ -d $pwd ]]; then
-    echo "$pwd exists and is a directory!"
+if [[ -d $working_dir ]]; then
+    echo "$working_dir exists and is a directory!"
 else
-    echo "$pwd is not a directory"
+    echo "$working_dir is not a directory"
     exit 1
 fi
 
 #check to see if the backupt directory isnt inside the pwd directory
-checkifparent=$(find "$pwd" -type d -wholename "$backup_dir")
+checkifparent=$(find "$working_dir" -type d -wholename "$backup_dir")
 if [[ -n $checkifparent ]]; then
     echo "Cant do backup in the original directory"
     exit 1
@@ -73,13 +75,13 @@ fi
 backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
 # loop through files in the source directory
-for path in "$pwd"/*; do
+for path in "$working_dir"/*; do
     if [[ -f $path ]]; then
 
         filename=$(basename $path)
 
         # check modification date
-        if [[ -e "$backup_dir/$path" \
+        if [[ -f "$backup_dir/$path" \
         && ! "$path" -nt "$backup_dir/$filename" ]]; then
             continue
         fi
@@ -90,7 +92,6 @@ for path in "$pwd"/*; do
         if [[ "$check" == false ]]; then
             cp -a "$path" "$backup_dir"
         fi
-
     fi
 done
 
@@ -98,7 +99,7 @@ for backup_path in "$backup_dir"/*; do
     backup_filename=$(basename "$backup_path") 
 
     # remove file if it doesn't exist in the working directory
-    if [[ ! -e "$pwd/$backup_filename" ]]; then
+    if [[ ! -e "$working_dir/$backup_filename" ]]; then
         echo "rm $backup_path"  
 
         if [[ "$check" == false ]]; then
