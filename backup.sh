@@ -26,14 +26,15 @@ backup_copy() {
         # get basename of path for later
         local basename=$(basename "$path")
 
-        # check if regex matches basename
-        if [[ -n "$REGEX" && ! "$basename" =~ $REGEX ]]; then
-            echo "skipping $path - doesn't match regex"
-            continue
-        fi
-
         # if path is a file
         if [[ -f "$path" ]]; then
+
+            # check if regex matches basename
+            if [[ -n "$REGEX" && ! "$basename" =~ $REGEX ]]; then
+                echo "skipping $path - doesn't match regex"
+                continue
+            fi
+
             # check modification date
             if [[ -f "$backup_dir/$basename" \
             && ! "$path" -nt "$backup_dir/$basename" ]]; then
@@ -42,9 +43,9 @@ backup_copy() {
             fi
 
             # copy the file
-            echo "cp $path $backup_dir"
+            echo "cp -a $path $backup_dir"
             if [[ "$CHECK" == false ]]; then
-                cp "$path" "$backup_dir"
+                cp -a "$path" "$backup_dir"
             fi
 
         # if path is directory
