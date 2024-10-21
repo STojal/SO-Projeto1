@@ -1,5 +1,8 @@
 #!/bin/bash
 
+CHECK=false
+REGEX=""
+
 Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -117,7 +120,14 @@ while getopts 'cr:h' opt; do
         ;;
     r)  
         REGEX="$OPTARG"
-        echo "regex = $REGEX"
+        local test_str=""
+        if [[ "$test_str" =~ $REGEX ]]; then
+            echo "valid regex"
+        elif [[ $? -eq 2 ]]; then
+            echo "Error: invalid regex, proceeding without regex."
+            REGEX=""
+            (( ERRORS++ ))
+        fi
         ;;
     h)
         Help
@@ -178,4 +188,3 @@ backup_copy "$working_dir" "$backup_dir"
 backup_remove "$working_dir" "$backup_dir"
 
 echo "Backup finished!"
-echo "$ERRORS Errors; $WARNINGS Warnings; $UPDATES Updated; $COPIES Copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B);"
