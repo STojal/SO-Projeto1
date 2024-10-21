@@ -152,6 +152,22 @@ while getopts 'cr:h' opt; do
             (( ERRORS++ ))
         fi
         ;;
+
+    b)   
+        file_name=${OPTARG}
+        #check if file exists 
+        echo "Checking file"
+        if [ -f "$file_name" ]; then 
+            echo "File exists"
+            echo "Processing option -b file name $file_name"
+            FILE_NAME=$file_name
+
+            file_use=true
+        else 
+            echo "Error: file  $file_name doesn't exist - proceeding without ignore file"
+            (( ERRORS++ ))
+        fi
+        ;;
     h)
         Help
         exit 0
