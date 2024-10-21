@@ -1,5 +1,8 @@
 #!/bin/bash
 
+CHECK=false
+REGEX=""
+
 Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
