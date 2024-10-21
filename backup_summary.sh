@@ -1,8 +1,21 @@
 #!/bin/bash
 
-CHECK=false
 
+# option global variables
+CHECK=false
 REGEX=""
+
+# warning global variables
+ERRORS=0
+WARNINGS=0
+
+UPDATES=0
+
+COPIES=0
+COPIES_SIZE=0
+
+DELETES=0
+DELETES_SIZE=0
 
 Help() {
     echo "Run this script to create a backup for a directory."
@@ -28,20 +41,8 @@ backup_copy() {
         # get basename of path for later
         local basename=$(basename "$path")
 
-
-
         # if path is a file
         if [[ -f "$path" ]]; then
-
-            if [[ "$arrayEmpty" == false ]]; then
-                #check if the fileTOremove is eual to the atual path
-                for fileRemove in "${arrayFiles[@]}"; do 
-                    if [[ "$fileRemove" == "$basename" ]]; then
-                        echo "The file $path  won't be copy"
-                        continue 2
-                    fi 
-                done 
-            fi
 
             # check if regex matches basename
             if [[ -n "$REGEX" && ! "$basename" =~ $REGEX ]]; then
@@ -58,6 +59,14 @@ backup_copy() {
 
             # copy the file
             echo "cp -a $path $backup_dir"
+            
+            # add information
+            if [[ -f $backup_dir/$basename ]]; then
+                (( UPDATES++ ))
+            else
+                (( COPIES++ ))
+                (( COPIES_SIZE+=$(stat -c%s "$path")  ))
+            fi
 
             if [[ "$CHECK" == false ]]; then
                 cp -a "$path" "$backup_dir"
@@ -65,18 +74,6 @@ backup_copy() {
 
         # if path is directory
         elif [[ -d "$path" ]]; then
-
-
-            if [[ "$arrayEmpty" == false ]]; then
-                #check if the fileTOremove is eual to the atual path
-                for directoryToRemove in "${arrayFiles[@]}"; do 
-                    if [[ "$directoryToRemove" == "$path" ]]; then
-                        echo "O directorio $path nao vai ser copiado"
-                        continue 2
-                    fi 
-                done 
-            fi
-
 
             # check if directory exists in backup, and make one if not
             if [[ ! -d "$backup_dir/$basename" ]]; then
@@ -97,7 +94,7 @@ backup_remove(){
 
     for backup_path in $backup_dir/*; do
 
-        local basename=$(basename $backup_path)
+        local basename=$(basename "$backup_path")
 
         # if path is file
         if [[ -f "$backup_path" ]]; then
@@ -105,7 +102,8 @@ backup_remove(){
             # if file still exists in working directory
             if [[ ! -f "$working_dir/$basename" ]]; then
                 echo "rm $backup_path"
-                
+                (( DELETES++ ))
+                (( DELETES_SIZE+=$(stat -c%s "$backup_path")  ))
                 if [[ "$CHECK" == false ]]; then
                     rm "$backup_path"
                 fi
@@ -132,14 +130,12 @@ backup_remove(){
         fi
 
 
-
     done
 
 }
 
 # parsing options
-while getopts 'cr:hb:' opt; do
-
+while getopts 'cr:h' opt; do
     case $opt in
     c)
         echo "(dry run, no changes)"
@@ -156,23 +152,6 @@ while getopts 'cr:hb:' opt; do
             (( ERRORS++ ))
         fi
         ;;
-    b)
-         
-        file_name=${OPTARG}
-        #check if file exists 
-        echo "Checking file"
-        if [ -f "$file_name" ]; then 
-            echo "File exists"
-            echo "Processing option -b file name $file_name"
-            FILE_NAME=$file_name
-
-            file_use=true
-        else 
-            echo "File  $file_name doesnt exist prociding normal"
-        fi
-
-        
-
     h)
         Help
         exit 0
@@ -227,26 +206,9 @@ else
     echo "$backup_dir directory was created successfully!"
 fi
 
-arrayEmpty=true
-#check the values in the file 
-if [[ "$file_use" == true ]]; then 
-    readarray -t arrayFiles < $FILE_NAME
-fi
-
- #check if exist files to delet
-if (( ${#arrayFiles[@]} )); then
-    echo "Array not empty"
-    arrayEmpty=false;
-fi
-
 backup_copy "$working_dir" "$backup_dir"
 
 backup_remove "$working_dir" "$backup_dir"
 
 echo "Backup finished!"
-echo "$ERRORS Errors; $WARNINGS Warnings; $UPDATES Updated; $COPIES Copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B);"
-backup_copy "$working_dir" "$backup_dir"
-
-backup_remove "$working_dir" "$backup_dir"
-
-echo "Backup finished!"
+echo "While backing up $working_dir : $ERRORS errors; $WARNINGS warnings; $UPDATES updated; $COPIES copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B);"
