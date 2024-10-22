@@ -4,7 +4,6 @@ CHECK=false
 FILE_NAME=""
 REGEX=""
 arrayFiles=()
-arrayEmpty=true
 remove_all=false
 
 Help() {
@@ -14,6 +13,25 @@ Help() {
     echo "b     pass a txt file with the names of the files and directories to not be copied"
     echo "r     only copy the files and directories that match the regex expression"
 }
+
+is_ignorable() {
+    local path=$1
+    local filename=$(basename $path)
+    if [[ -n "$arrayFiles" && "${arrayFiles[@]}" =~ "$basename" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+regex_matches() {
+    local path=$1
+    local filename=$(basename $path)
+    if [[ -n "$REGEX" && "$basename" =~ $REGEX ]]; then
+        return 0
+    fi 
+    return 1
+}
+
 
 backup_copy() {
     local working_dir=$1
@@ -32,7 +50,7 @@ backup_copy() {
         local basename=$(basename "$path")
 
         #check if the fileToIgnore is equal path
-        if [[ -n "$arrayFiles" && "${arrayFiles[@]}" =~ "$basename" ]]; then
+        if is_ignorable "$basename" ; then
             echo "skipping $path - in the ignore file"
             continue
         fi
@@ -41,7 +59,7 @@ backup_copy() {
         if [[ -f "$path" ]]; then
 
             # check if regex matches basename
-            if [[ -n "$REGEX" && ! "$basename" =~ $REGEX ]]; then
+            if ! regex_matches "$basename" ; then
                 echo "skipping $path - doesn't match regex"
                 continue
             fi
@@ -91,7 +109,8 @@ backup_remove(){
 
             # if file still exists in working directory
             if [[ ! -f "$working_dir/$basename" ]] \
-            || [[ -n "$arrayFiles" && "${arrayFiles[@]}" =~ "$basename" ]] \
+            || is_ignorable "$basename" \
+            || ! regex_matches "$basename" \
             || [[ "$remove_all" == true ]]; then 
                 echo "rm $backup_path"
                 
@@ -104,7 +123,7 @@ backup_remove(){
         # if path is directory
         elif [[ -d "$backup_path" ]]; then
 
-            if [[ -n "$arrayFiles" && "${arrayFiles[@]}" =~ "$basename" ]]; then
+            if is_ignorable "$basename" ; then
                 remove_all=true
             fi
             
@@ -114,8 +133,8 @@ backup_remove(){
 
             # check if directory still exists in working directory
             if [[ ! -d "$working_dir/$basename" ]] \
-            || [[ -n "$arrayFiles" && "${arrayFiles[@]}" =~ "$basename" ]] \
-            || [[ "$remove_all" ]]; then
+            || is_ignorable "$basename" \
+            || [[ "$remove_all" == true ]]; then
                 echo "rmdir $backup_dir/$basename"
 
                 # remove directory in backup
@@ -155,7 +174,7 @@ while getopts 'cr:hb:' opt; do
             echo "File exists"
             echo "Processing option -b file name $FILE_NAME"
             readarray -t arrayFiles < $FILE_NAME
-            arrayEmpty=false
+        e
         else 
             echo "File $FILE_NAME doesn't exist, proceeding normally"
         fi
@@ -197,7 +216,8 @@ fi
 backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
 # Check if backup directory is inside the working directory
-if [[ "$backup_dir" == "$working_dir"* ]]; then
+backup_is_valid=$(find "$working_dir" -type d -name "$backup_dir")
+if [[ -n $backup_is_valid ]]; then
     echo "Cannot do backup in the original directory"
     exit 1
 fi
