@@ -1,4 +1,0 @@
-Teste.odt
-lixo
-Ex1.sh
-/home/simao/SO/aula2

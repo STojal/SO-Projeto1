@@ -28,16 +28,21 @@ Help() {
     echo "r     only copy the files and directories that match the regex expression"
 }
 
+
 is_ignorable() {
+    # checks if a file can be ignored based on the information in the file passed with the -b option
+
     local path=$1
     local filename=$(basename $path)
-    if [[ -n "$arrayFiles" && "${arrayFiles[@]}" =~ "$filename" ]]; then
+    if [[ -n "$arrayFiles" && " ${arrayFiles[@]} " =~ " ${filename} " ]]; then
         return 0 # file is ignorable
     fi
     return 1 # file is not ignorable
 }
 
 regex_matches() {
+    # checks if a file's name matches the regex passed with the -r option
+
     local path=$1
     local filename=$(basename $path)
     if [[ -z "$REGEX" || "$filename" =~ $REGEX ]]; then
@@ -48,6 +53,8 @@ regex_matches() {
 
 
 backup_copy() {
+    # iterates a directory recursively and copies its contents to the backup directory while outputting information about what it's doing
+
     local working_dir=$1
     local backup_dir=$2
 
@@ -56,7 +63,6 @@ backup_copy() {
         # make sure path exists
         if [[ ! -e $path ]]; then
             echo "skipping $working_dir - nothing found"
-
             return
         fi
 
@@ -118,11 +124,13 @@ backup_copy() {
 }
 
 backup_remove(){
+    # iterates trough the backup directory and removes any files that are no longer in the working directory or that shouldn't be there anymore
+
     local working_dir=$1
     local backup_dir=$2
     local remove_all=$3
 
-    for backup_path in $backup_dir/*; do
+    for backup_path in "$backup_dir"/*; do
 
         local basename=$(basename $backup_path)
 
@@ -244,23 +252,26 @@ fi
 backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
 
-# Check if backup exists and create it if it doesn't
-if [[ ! -d "$backup_dir" ]]; then
-    if [[ "$backup_dir" =~ "/" ]]; then
-        $backup_dir=../$backup_dir
-    fi
-    echo mkdir $backup_dir
-    if [[ "$CHECK" == false ]]; then
-        mkdir "$backup_dir"
-    fi
+if [[ ! "$backup_dir" =~ ^/ ]]; then
+    backup_dir="../$backup_dir"
 fi
 
-# Check if backup directory is inside the working directory
-backup_basename=$(basename "$backup_dir")
-backup_is_valid=$(find "$working_dir" -type d -name $(basename "$backup_basename"))
-if [[ -n $backup_is_valid ]]; then
+# convert to absolute paths
+working_dir=$(cd "$working_dir" && pwd)
+backup_dir=$(cd "$(dirname "$backup_dir")" && pwd)/$(basename "$backup_dir")
+
+# check if backup directory is inside the working directory
+if [[ "$backup_dir" == "$working_dir"* ]]; then
     echo "Cannot do backup in the original directory"
     exit 1
+fi
+
+# check if backup directory exists, and create it if not
+if [[ ! -d "$backup_dir" ]]; then
+    echo "Creating backup directory: $backup_dir"
+    if [[ "$CHECK" == false ]]; then
+        mkdir -p "$backup_dir"
+    fi
 fi
 
 backup_copy "$working_dir" "$backup_dir"

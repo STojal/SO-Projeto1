@@ -1,4 +1,4 @@
 backup_files.sh
 backup_summary.sh
-poopy
+poopy.txt
 ignore.txt
