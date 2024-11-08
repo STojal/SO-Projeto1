@@ -64,6 +64,13 @@ backup_copy() {
                 continue
             fi
 
+            # check if backup/file is newer that file
+            if [[ -f "$backup_dir/$basename" \
+            && "$backup_dir/$basename" -nt "$path" ]]; then
+                echo "skipping $path - file in backup is newer than the present file"
+                continue
+            fi
+
             # check modification date
             if [[ -f "$backup_dir/$basename" \
             && ! "$path" -nt "$backup_dir/$basename" ]]; then
