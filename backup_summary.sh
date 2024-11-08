@@ -1,9 +1,11 @@
 #!/bin/bash
 
-
-# option global variables
+# global option variables
 CHECK=false
+FILE_NAME=""
 REGEX=""
+arrayFiles=()
+remove_all=false
 
 # warning global variables
 ERRORS=0
@@ -17,6 +19,7 @@ COPIES_SIZE=0
 DELETES=0
 DELETES_SIZE=0
 
+
 Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -25,7 +28,33 @@ Help() {
     echo "r     only copy the files and directories that match the regex expression"
 }
 
+
+is_ignorable() {
+    # checks if a file can be ignored based on the information in the file passed with the -b option
+
+    local path=$1
+    local filename=$(basename $path)
+    if [[ -n "$arrayFiles" && " ${arrayFiles[@]} " =~ " ${filename} " ]]; then
+        return 0 # file is ignorable
+    fi
+    return 1 # file is not ignorable
+}
+
+regex_matches() {
+    # checks if a file's name matches the regex passed with the -r option
+
+    local path=$1
+    local filename=$(basename $path)
+    if [[ -z "$REGEX" || "$filename" =~ $REGEX ]]; then
+        return 0  # matches regex
+    fi
+    return 1 # doesn't match regex
+}
+
+
 backup_copy() {
+    # iterates a directory recursively and copies its contents to the backup directory while outputting information about what it's doing
+
     local working_dir=$1
     local backup_dir=$2
 
@@ -34,18 +63,23 @@ backup_copy() {
         # make sure path exists
         if [[ ! -e $path ]]; then
             echo "skipping $working_dir - nothing found"
-
             return
         fi
 
         # get basename of path for later
         local basename=$(basename "$path")
 
+        #check if the fileToIgnore is equal path
+        if is_ignorable "$basename" ; then
+            echo "skipping $path - in the ignore file"
+            continue
+        fi
+
         # if path is a file
         if [[ -f "$path" ]]; then
 
             # check if regex matches basename
-            if [[ -n "$REGEX" && ! "$basename" =~ $REGEX ]]; then
+            if ! regex_matches "$basename" ; then
                 echo "skipping $path - doesn't match regex"
                 continue
             fi
@@ -59,8 +93,8 @@ backup_copy() {
 
             # copy the file
             echo "cp -a $path $backup_dir"
-            
-            # add information
+
+            # update summary
             if [[ -f $backup_dir/$basename ]]; then
                 (( UPDATES++ ))
             else
@@ -85,40 +119,57 @@ backup_copy() {
             
             backup_copy "$path" "$backup_dir/$basename"
         fi
+        
     done
 }
 
 backup_remove(){
+    # iterates trough the backup directory and removes any files that are no longer in the working directory or that shouldn't be there anymore
+
     local working_dir=$1
     local backup_dir=$2
+    local remove_all=$3
 
-    for backup_path in $backup_dir/*; do
+    for backup_path in "$backup_dir"/*; do
 
-        local basename=$(basename "$backup_path")
+        local basename=$(basename $backup_path)
 
         # if path is file
         if [[ -f "$backup_path" ]]; then
 
             # if file still exists in working directory
-            if [[ ! -f "$working_dir/$basename" ]]; then
+            if [[ ! -f "$working_dir/$basename" ]] \
+            || is_ignorable "$basename" \
+            || ! regex_matches "$basename" \
+            || [[ "$remove_all" == true ]]; then 
+
                 echo "rm $backup_path"
+                
+                # update summary
                 (( DELETES++ ))
                 (( DELETES_SIZE+=$(stat -c%s "$backup_path")  ))
+
                 if [[ "$CHECK" == false ]]; then
                     rm "$backup_path"
                 fi
             fi
-        
+
+
         # if path is directory
         elif [[ -d "$backup_path" ]]; then
-            
+
+            if is_ignorable "$basename" ; then
+                remove_all=true
+            fi
             
             # remove all contents of directory that no longer exist in working directory
-            backup_remove "$working_dir/$basename" "$backup_path"
+            backup_remove "$working_dir/$basename" "$backup_path" "$remove_all"
             # this makes sure the directory is empty if it needs to be removed
 
             # check if directory still exists in working directory
-            if [[ ! -d "$working_dir/$basename" ]]; then
+            if [[ ! -d "$working_dir/$basename" ]] \
+            || is_ignorable "$basename" \
+            || [[ "$remove_all" == true ]]; then
                 echo "rmdir $backup_dir/$basename"
 
                 # remove directory in backup
@@ -126,16 +177,15 @@ backup_remove(){
                     rmdir "$backup_dir/$basename"
                 fi
             fi
+
+            remove_all=false
             
         fi
-
-
     done
-
 }
 
 # parsing options
-while getopts 'cr:h' opt; do
+while getopts 'cr:hb:' opt; do
     case $opt in
     c)
         echo "(dry run, no changes)"
@@ -143,12 +193,25 @@ while getopts 'cr:h' opt; do
         ;;
     r)  
         REGEX="$OPTARG"
-        local test_str=""
+        test_str=""
         if [[ "$test_str" =~ $REGEX ]]; then
             echo "valid regex"
         elif [[ $? -eq 2 ]]; then
             echo "Error: invalid regex, proceeding without regex."
             REGEX=""
+            (( ERRORS++ ))
+        fi
+        ;;
+    b)
+        FILE_NAME=${OPTARG}
+        #check if file exists 
+        echo "Checking file"
+        if [ -f "$FILE_NAME" ]; then 
+            echo "File exists"
+            echo "Processing option -b file name $FILE_NAME"
+            readarray -t arrayFiles < $FILE_NAME
+        else 
+            echo "Error: file  $file_name doesn't exist - proceeding without ignore file"
             (( ERRORS++ ))
         fi
         ;;
@@ -188,27 +251,32 @@ fi
 
 backup_dir="${backup_dir%/}" # remove the trailing slash from the string
 
-# Check if backup directory is inside the working directory
+
+if [[ ! "$backup_dir" =~ ^/ ]]; then
+    backup_dir="../$backup_dir"
+fi
+
+# convert to absolute paths
+working_dir=$(cd "$working_dir" && pwd)
+backup_dir=$(cd "$(dirname "$backup_dir")" && pwd)/$(basename "$backup_dir")
+
+# check if backup directory is inside the working directory
 if [[ "$backup_dir" == "$working_dir"* ]]; then
     echo "Cannot do backup in the original directory"
     exit 1
 fi
 
-# Check if backup exists and create it if it doesn't
-if [[ -d "$backup_dir" ]]; then
-    echo "Backup directory is valid!"
-else
-    echo "Creating backup directory..."
+# check if backup directory exists, and create it if not
+if [[ ! -d "$backup_dir" ]]; then
+    echo "Creating backup directory: $backup_dir"
     if [[ "$CHECK" == false ]]; then
-        backup_dir=../$backup_dir
         mkdir -p "$backup_dir"
     fi
-    echo "$backup_dir directory was created successfully!"
 fi
 
 backup_copy "$working_dir" "$backup_dir"
 
-backup_remove "$working_dir" "$backup_dir"
+backup_remove "$working_dir" "$backup_dir" "$remove_all"
 
 echo "Backup finished!"
-echo "While backing up $working_dir : $ERRORS errors; $WARNINGS warnings; $UPDATES updated; $COPIES copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B);"
+echo "While backuping $working_dir: $ERRORS errors; $WARNINGS warnings; $UPDATES updated; $COPIES copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B)"
