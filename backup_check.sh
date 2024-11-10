@@ -1,22 +1,13 @@
 #!/bin/bash
 
-if [[ $# -ne 2 ]]; then
-    echo "please enter 2 arguments: the working directory and the backup directory"
-fi
-
-
-working_dir=$1
-backup_dir=$2
 differences=0
 
-if ! [[ -d "$working_dir" && -d "$backup_dir" ]]; then
-    echo "please enter valid directories"
-fi
+backup_check(){
+    local working_dir=$1
+    local backup_dir=$2
 
-echo "starting backup check..."
-
-# iterate the files in the backup directory
-for file in "$backup_dir"/*; do
+    # iterate the files in the backup directory
+    for file in "$backup_dir"/*; do
 
     filename=$(basename $file)
 
@@ -27,7 +18,28 @@ for file in "$backup_dir"/*; do
         fi
     fi
 
+    if [[ -d "$file" && -d "$working_dir/$filename" ]]; then
+        backup_check "$file" "$working_dir/$filename"
+    fi
+
 done
+}
+
+if [[ $# -ne 2 ]]; then
+    echo "please enter 2 arguments: the working directory and the backup directory"
+fi
+
+
+working_dir=$1
+backup_dir=$2
+
+if ! [[ -d "$working_dir" && -d "$backup_dir" ]]; then
+    echo "please enter valid directories"
+fi
+
+echo "starting backup check..."
+
+backup_check "$working_dir" "$backup_dir"
 
 echo "backup check finished!"
 
@@ -36,4 +48,3 @@ if [[ $differences -eq 0 ]]; then
 else
     echo "differences detected: $differences"
 fi
-
