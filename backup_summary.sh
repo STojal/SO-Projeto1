@@ -33,7 +33,7 @@ is_ignorable() {
     # checks if a file can be ignored based on the information in the file passed with the -b option
 
     local path=$1
-    local filename=$(basename $path)
+    local filename=$(basename "$path")
     if [[ -n "$arrayFiles" && " ${arrayFiles[@]} " =~ " ${filename} " ]]; then
         return 0 # file is ignorable
     fi
@@ -44,7 +44,7 @@ regex_matches() {
     # checks if a file's name matches the regex passed with the -r option
 
     local path=$1
-    local filename=$(basename $path)
+    local filename=$(basename "$path")
     if [[ -z "$REGEX" || "$filename" =~ $REGEX ]]; then
         return 0  # matches regex
     fi
@@ -87,7 +87,7 @@ backup_copy() {
             # check modification date
             if [[ -f "$backup_dir/$basename" \
             && ! "$path" -nt "$backup_dir/$basename" ]]; then
-                echo "skipping $path - no new changes"
+                echo "skipping \"$path\" - no new changes"
                 continue
             fi
 
@@ -132,7 +132,7 @@ backup_remove(){
 
     for backup_path in "$backup_dir"/*; do
 
-        local basename=$(basename $backup_path)
+        local basename=$(basename "$backup_path")
 
         # if path is file
         if [[ -f "$backup_path" ]]; then
