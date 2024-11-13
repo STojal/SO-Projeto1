@@ -18,8 +18,7 @@ COPIES_SIZE=0
 
 DELETES=0
 DELETES_SIZE=0
-
-
+local_DELETES_SIZE=0;
 Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -117,8 +116,14 @@ backup_copy() {
 
     local working_dir=$1
     local backup_dir=$2
+    local local_ERRORS=0;
+    local local_WARNINGS=0;
+    local local_UPDATES=0;
+    local local_COPIES=0;
+    local local_COPIES_SIZE=0;
+    local local_deleted_size=0;
+    local local_DELETES_SIZE=0;
 
-    backup_remove "$working_dir" "$backup_dir" false
 
     for path in "$working_dir"/*; do
 
@@ -140,6 +145,16 @@ backup_copy() {
         # if path is a file
         if [[ -f "$path" ]]; then
 
+
+            # check if backup/file is newer that file
+            if [[ -f "$backup_dir/$basename" \
+            && "$backup_dir/$basename" -nt "$path" ]]; then
+                echo "skipping $path - file in backup is newer than the present file"
+                (( local_WARNINGS++ ))
+                continue
+            fi
+
+
             # check if regex matches basename
             if ! regex_matches "$basename" ; then
                 echo "skipping $path - doesn't match regex"
@@ -158,10 +173,10 @@ backup_copy() {
 
             # update summary
             if [[ -f $backup_dir/$basename ]]; then
-                (( UPDATES++ ))
+                (( local_UPDATES++ ))
             else
-                (( COPIES++ ))
-                (( COPIES_SIZE+=$(stat -c%s "$path")  ))
+                (( local_COPIES++ ))
+                (( local_COPIES_SIZE+=$(stat -c%s "$path")  ))
             fi
 
             if [[ "$CHECK" == false ]]; then
@@ -180,12 +195,90 @@ backup_copy() {
             fi
             
             backup_copy "$path" "$backup_dir/$basename"
+
         fi
         
     done
+    # Add the local counts to the global counts
+    ((ERRORS += local_ERRORS))
+    ((WARNINGS += local_WARNINGS))
+    ((UPDATES += local_UPDATES))
+    ((COPIES += local_COPIES))
+    ((COPIES_SIZE += local_COPIES_SIZE))
+    ((DELETES += local_DELETES))
+    ((DELETES_SIZE += local_DELETES_SIZE))
+    echo "While backuping $working_dir: $local_ERRORS errors; $local_WARNINGS warnings; $local_UPDATES updated; $local_COPIES copied (${local_COPIES_SIZE}B); $local_DELETES deleted (${local_DELETES_SIZE}B)"
+
+
 }
 
+backup_remove(){
+    # iterates trough the backup directory and removes any files that are no longer in the working directory or that shouldn't be there anymore
 
+    local working_dir=$1
+    local backup_dir=$2
+    local remove_all=$3
+
+    # Local counters for this remove operation
+    local local_DELETES=0
+    local local_DELETES_SIZE=0
+
+    for backup_path in "$backup_dir"/*; do
+
+        local basename=$(basename "$backup_path")
+
+        # if path is file
+        if [[ -f "$backup_path" ]]; then
+
+            # if file still exists in working directory
+            if [[ ! -f "$working_dir/$basename" ]] \
+            || is_ignorable "$basename" \
+            || ! regex_matches "$basename" \
+            || [[ "$remove_all" == true ]]; then 
+
+                echo "rm $backup_path"
+                
+                # update summary
+                (( DELETES++ ))
+                (( DELETES_SIZE+=$(stat -c%s "$backup_path")  ))
+
+                if [[ "$CHECK" == false ]]; then
+                    rm "$backup_path"
+                fi
+            fi
+
+
+        # if path is directory
+        elif [[ -d "$backup_path" ]]; then
+
+            if is_ignorable "$basename" ; then
+                remove_all=true
+            fi
+            
+            # remove all contents of directory that no longer exist in working directory
+            backup_remove "$working_dir/$basename" "$backup_path" "$remove_all"
+            # this makes sure the directory is empty if it needs to be removed
+
+            # check if directory still exists in working directory
+            if [[ ! -d "$working_dir/$basename" ]] \
+            || is_ignorable "$basename" \
+            || [[ "$remove_all" == true ]]; then
+                echo "rmdir $backup_dir/$basename"
+
+                # remove directory in backup
+                if [[ "$CHECK" == false ]]; then
+                    rmdir "$backup_dir/$basename"
+                fi
+            fi
+
+            remove_all=false
+            
+        fi
+    done
+    # Add local delete counters to global counters
+    ((DELETES += local_DELETES))
+    ((DELETES_SIZE += local_DELETES_SIZE))
+}
 
 # parsing options
 while getopts 'cr:hb:' opt; do
@@ -281,5 +374,5 @@ backup_copy "$working_dir" "$backup_dir"
 
 # backup_remove "$working_dir" "$backup_dir" "$remove_all"
 
+echo "While backuping $path: $ERRORS errors; $WARNINGS warnings; $UPDATES updated; $COPIES copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B)"
 echo "Backup finished!"
-echo "While backuping $working_dir: $ERRORS errors; $WARNINGS warnings; $UPDATES updated; $COPIES copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B)"
