@@ -48,4 +48,3 @@ if [[ $differences -eq 0 ]]; then
 else
     echo "differences detected: $differences"
 fi
-
