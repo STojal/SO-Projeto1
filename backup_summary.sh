@@ -51,12 +51,74 @@ regex_matches() {
     return 1 # doesn't match regex
 }
 
+backup_remove(){
+    # iterates trough the backup directory and removes any files that are no longer in the working directory or that shouldn't be there anymore
+
+    local working_dir=$1
+    local backup_dir=$2
+    local remove_all=$3
+
+    for backup_path in "$backup_dir"/*; do
+
+        local basename=$(basename "$backup_path")
+
+        # if path is file
+        if [[ -f "$backup_path" ]]; then
+
+            # if file still exists in working directory
+            if [[ ! -f "$working_dir/$basename" ]] \
+            || is_ignorable "$basename" \
+            || ! regex_matches "$basename" \
+            || [[ "$remove_all" == true ]]; then 
+
+                echo "rm $backup_path"
+                
+                # update summary
+                (( DELETES++ ))
+                (( DELETES_SIZE+=$(stat -c%s "$backup_path")  ))
+
+                if [[ "$CHECK" == false ]]; then
+                    rm "$backup_path"
+                fi
+            fi
+
+
+        # if path is directory
+        elif [[ -d "$backup_path" ]]; then
+
+            if is_ignorable "$basename" ; then
+                remove_all=true
+            fi
+            
+            # remove all contents of directory that no longer exist in working directory
+            backup_remove "$working_dir/$basename" "$backup_path" "$remove_all"
+            # this makes sure the directory is empty if it needs to be removed
+
+            # check if directory still exists in working directory
+            if [[ ! -d "$working_dir/$basename" ]] \
+            || is_ignorable "$basename" \
+            || [[ "$remove_all" == true ]]; then
+                echo "rmdir $backup_dir/$basename"
+
+                # remove directory in backup
+                if [[ "$CHECK" == false ]]; then
+                    rmdir "$backup_dir/$basename"
+                fi
+            fi
+
+            remove_all=false
+            
+        fi
+    done
+}
 
 backup_copy() {
     # iterates a directory recursively and copies its contents to the backup directory while outputting information about what it's doing
 
     local working_dir=$1
     local backup_dir=$2
+
+    backup_remove "$working_dir" "$backup_dir" false
 
     for path in "$working_dir"/*; do
 
@@ -123,66 +185,7 @@ backup_copy() {
     done
 }
 
-backup_remove(){
-    # iterates trough the backup directory and removes any files that are no longer in the working directory or that shouldn't be there anymore
 
-    local working_dir=$1
-    local backup_dir=$2
-    local remove_all=$3
-
-    for backup_path in "$backup_dir"/*; do
-
-        local basename=$(basename "$backup_path")
-
-        # if path is file
-        if [[ -f "$backup_path" ]]; then
-
-            # if file still exists in working directory
-            if [[ ! -f "$working_dir/$basename" ]] \
-            || is_ignorable "$basename" \
-            || ! regex_matches "$basename" \
-            || [[ "$remove_all" == true ]]; then 
-
-                echo "rm $backup_path"
-                
-                # update summary
-                (( DELETES++ ))
-                (( DELETES_SIZE+=$(stat -c%s "$backup_path")  ))
-
-                if [[ "$CHECK" == false ]]; then
-                    rm "$backup_path"
-                fi
-            fi
-
-
-        # if path is directory
-        elif [[ -d "$backup_path" ]]; then
-
-            if is_ignorable "$basename" ; then
-                remove_all=true
-            fi
-            
-            # remove all contents of directory that no longer exist in working directory
-            backup_remove "$working_dir/$basename" "$backup_path" "$remove_all"
-            # this makes sure the directory is empty if it needs to be removed
-
-            # check if directory still exists in working directory
-            if [[ ! -d "$working_dir/$basename" ]] \
-            || is_ignorable "$basename" \
-            || [[ "$remove_all" == true ]]; then
-                echo "rmdir $backup_dir/$basename"
-
-                # remove directory in backup
-                if [[ "$CHECK" == false ]]; then
-                    rmdir "$backup_dir/$basename"
-                fi
-            fi
-
-            remove_all=false
-            
-        fi
-    done
-}
 
 # parsing options
 while getopts 'cr:hb:' opt; do
@@ -276,7 +279,7 @@ fi
 
 backup_copy "$working_dir" "$backup_dir"
 
-backup_remove "$working_dir" "$backup_dir" "$remove_all"
+# backup_remove "$working_dir" "$backup_dir" "$remove_all"
 
 echo "Backup finished!"
 echo "While backuping $working_dir: $ERRORS errors; $WARNINGS warnings; $UPDATES updated; $COPIES copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B)"
