@@ -10,15 +10,12 @@ remove_all=false
 # warning global variables
 ERRORS=0
 WARNINGS=0
-
 UPDATES=0
-
 COPIES=0
 COPIES_SIZE=0
-
 DELETES=0
 DELETES_SIZE=0
-local_DELETES_SIZE=0;
+
 Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -26,7 +23,6 @@ Help() {
     echo "b     pass a txt file with the names of the files and directories to not be copied"
     echo "r     only copy the files and directories that match the regex expression"
 }
-
 
 is_ignorable() {
     # checks if a file can be ignored based on the information in the file passed with the -b option
@@ -50,177 +46,121 @@ regex_matches() {
     return 1 # doesn't match regex
 }
 
-
-backup_copy() {
-    # iterates a directory recursively and copies its contents to the backup directory while outputting information about what it's doing
-
-    local working_dir=$1
-    local backup_dir=$2
-    local local_ERRORS=0;
-    local local_WARNINGS=0;
-    local local_UPDATES=0;
-    local local_COPIES=0;
-    local local_COPIES_SIZE=0;
-    local local_deleted_size=0;
-    local local_DELETES_SIZE=0;
-
-
-    for path in "$working_dir"/*; do
-
-        # make sure path exists
-        if [[ ! -e $path ]]; then
-            echo "skipping $working_dir - nothing found"
-            return
-        fi
-
-        # get basename of path for later
-        local basename=$(basename "$path")
-
-        #check if the fileToIgnore is equal path
-        if is_ignorable "$basename" ; then
-            echo "skipping $path - in the ignore file"
-            continue
-        fi
-
-        # if path is a file
-        if [[ -f "$path" ]]; then
-
-
-            # check if backup/file is newer that file
-            if [[ -f "$backup_dir/$basename" \
-            && "$backup_dir/$basename" -nt "$path" ]]; then
-                echo "skipping $path - file in backup is newer than the present file"
-                (( local_WARNINGS++ ))
-                continue
-            fi
-
-
-            # check if regex matches basename
-            if ! regex_matches "$basename" ; then
-                echo "skipping $path - doesn't match regex"
-                continue
-            fi
-
-            # check modification date
-            if [[ -f "$backup_dir/$basename" \
-            && ! "$path" -nt "$backup_dir/$basename" ]]; then
-                echo "skipping \"$path\" - no new changes"
-                continue
-            fi
-
-            # copy the file
-            echo "cp -a $path $backup_dir"
-
-            # update summary
-            if [[ -f $backup_dir/$basename ]]; then
-                (( local_UPDATES++ ))
-            else
-                (( local_COPIES++ ))
-                (( local_COPIES_SIZE+=$(stat -c%s "$path")  ))
-            fi
-
-            if [[ "$CHECK" == false ]]; then
-                cp -a "$path" "$backup_dir"
-            fi
-
-        # if path is directory
-        elif [[ -d "$path" ]]; then
-
-            # check if directory exists in backup, and make one if not
-            if [[ ! -d "$backup_dir/$basename" ]]; then
-                echo "mkdir $backup_dir/$basename"
-                if [[ "$CHECK" == false ]]; then
-                    mkdir "$backup_dir/$basename"
-                fi
-            fi
-            
-            backup_copy "$path" "$backup_dir/$basename"
-
-        fi
-        
-    done
-    # Add the local counts to the global counts
-    ((ERRORS += local_ERRORS))
-    ((WARNINGS += local_WARNINGS))
-    ((UPDATES += local_UPDATES))
-    ((COPIES += local_COPIES))
-    ((COPIES_SIZE += local_COPIES_SIZE))
-    ((DELETES += local_DELETES))
-    ((DELETES_SIZE += local_DELETES_SIZE))
-    echo "While backuping $working_dir: $local_ERRORS errors; $local_WARNINGS warnings; $local_UPDATES updated; $local_COPIES copied (${local_COPIES_SIZE}B); $local_DELETES deleted (${local_DELETES_SIZE}B)"
-
-
-}
-
-backup_remove(){
-    # iterates trough the backup directory and removes any files that are no longer in the working directory or that shouldn't be there anymore
+backup_sync() {
+    # Recursively syncs the working_dir with the backup_dir, displaying a single summary for each directory level
 
     local working_dir=$1
     local backup_dir=$2
     local remove_all=$3
-
-    # Local counters for this remove operation
+    local local_ERRORS=0
+    local local_WARNINGS=0
+    local local_UPDATES=0
+    local local_COPIES=0
+    local local_COPIES_SIZE=0
     local local_DELETES=0
     local local_DELETES_SIZE=0
 
-    for backup_path in "$backup_dir"/*; do
+    # Ensure backup directory exists
+    if [[ ! -d "$backup_dir" ]]; then
+        echo "Creating directory: $backup_dir"
+        if [[ "$CHECK" == false ]]; then
+            mkdir -p "$backup_dir"
+        fi
+    fi
 
+    # Process each item in the working directory
+    for path in "$working_dir"/*; do
+        if [[ ! -e "$path" ]]; then
+            continue
+        fi
+
+        local basename=$(basename "$path")
+        
+        # Skip if file is ignorable
+        if is_ignorable "$basename"; then
+            continue
+        fi
+
+        # Check if path is a file
+        if [[ -f "$path" ]]; then
+            # If the backup file exists and is newer, count a warning
+            if [[ -f "$backup_dir/$basename" && "$backup_dir/$basename" -nt "$path" ]]; then
+                ((local_WARNINGS++))
+                echo "WARNING: backup entry $backup_dir/$basename is newer than $path; this should not happen."
+                continue
+            fi
+
+            # If regex does not match, skip the file
+            if ! regex_matches "$basename"; then
+                continue
+            fi
+
+            if [[ -f "$backup_dir/$basename" && "$path" -nt "$backup_dir/$basename" ]]; then
+                echo "cp -a $path $backup_dir"
+                if [[ "$CHECK" == false ]]; then
+                    cp -a "$path" "$backup_dir"
+                fi
+                ((local_UPDATES++))
+            elif [[ ! -f "$backup_dir/$basename" ]]; then
+                echo "cp -a $path $backup_dir"
+                if [[ "$CHECK" == false ]]; then
+                    cp -a "$path" "$backup_dir"
+                fi
+                ((local_COPIES++))
+                ((local_COPIES_SIZE += $(stat -c%s "$path")))  
+            fi
+
+
+        elif [[ -d "$path" ]]; then
+            # Recursively sync the subdirectory
+            backup_sync "$path" "$backup_dir/$basename" "$remove_all"
+        fi
+    done
+
+    # Process each item in the backup directory for removals
+    for backup_path in "$backup_dir"/*; do
         local basename=$(basename "$backup_path")
 
-        # if path is file
-        if [[ -f "$backup_path" ]]; then
+        if [[ ! -e "$backup_path" ]]; then
+            continue
+        fi
 
-            # if file still exists in working directory
-            if [[ ! -f "$working_dir/$basename" ]] \
-            || is_ignorable "$basename" \
-            || ! regex_matches "$basename" \
-            || [[ "$remove_all" == true ]]; then 
-
+        # If the item does not exist in working_dir or should be ignored, remove it
+        if [[ ! -e "$working_dir/$basename" ]] \
+        || is_ignorable "$basename" \
+        || ! regex_matches "$basename" \
+        || [[ "$remove_all" == true ]]; then
+            if [[ -f "$backup_path" ]]; then
+                ((local_DELETES++))
+                ((local_DELETES_SIZE += $(stat -c%s "$backup_path")))
                 echo "rm $backup_path"
-                
-                # update summary
-                (( DELETES++ ))
-                (( DELETES_SIZE+=$(stat -c%s "$backup_path")  ))
-
                 if [[ "$CHECK" == false ]]; then
                     rm "$backup_path"
                 fi
-            fi
+            elif [[ -d "$backup_path" ]]; then
+                # Recursively process the directory for further cleanup
+                backup_sync "$working_dir/$basename" "$backup_path" "$remove_all"
 
-
-        # if path is directory
-        elif [[ -d "$backup_path" ]]; then
-
-            if is_ignorable "$basename" ; then
-                remove_all=true
-            fi
-            
-            # remove all contents of directory that no longer exist in working directory
-            backup_remove "$working_dir/$basename" "$backup_path" "$remove_all"
-            # this makes sure the directory is empty if it needs to be removed
-
-            # check if directory still exists in working directory
-            if [[ ! -d "$working_dir/$basename" ]] \
-            || is_ignorable "$basename" \
-            || [[ "$remove_all" == true ]]; then
-                echo "rmdir $backup_dir/$basename"
-
-                # remove directory in backup
-                if [[ "$CHECK" == false ]]; then
-                    rmdir "$backup_dir/$basename"
+                # Remove the directory if it no longer exists in working_dir
+                if [[ ! -d "$working_dir/$basename" || "$remove_all" == true ]]; then
+                    echo "rmdir $backup_dir/$basename"
+                    if [[ "$CHECK" == false ]]; then
+                        rmdir "$backup_dir/$basename"
+                    fi
+                    ((local_DELETES++))
                 fi
             fi
-
-            remove_all=false
-            
         fi
     done
-    # Add local delete counters to global counters
-    ((DELETES += local_DELETES))
-    ((DELETES_SIZE += local_DELETES_SIZE))
+
+    # Print a single summary line for this directory level
+    echo "Summary for directory $working_dir:"
+    echo "Errors: $local_ERRORS, Warnings: $local_WARNINGS, Updates: $local_UPDATES, Copies: $local_COPIES (${local_COPIES_SIZE}B), Deletes: $local_DELETES (${local_DELETES_SIZE}B)"
 }
 
-# parsing options
+
+
+# Parsing options
 while getopts 'cr:hb:' opt; do
     case $opt in
     c)
@@ -229,10 +169,7 @@ while getopts 'cr:hb:' opt; do
         ;;
     r)  
         REGEX="$OPTARG"
-        test_str=""
-        if [[ "$test_str" =~ $REGEX ]]; then
-            echo "valid regex"
-        elif [[ $? -eq 2 ]]; then
+        if ! [[ "" =~ $REGEX ]]; then
             echo "Error: invalid regex, proceeding without regex."
             REGEX=""
             (( ERRORS++ ))
@@ -240,14 +177,14 @@ while getopts 'cr:hb:' opt; do
         ;;
     b)
         FILE_NAME=${OPTARG}
-        #check if file exists 
+        # Check if file exists 
         echo "Checking file"
         if [ -f "$FILE_NAME" ]; then 
             echo "File exists"
             echo "Processing option -b file name $FILE_NAME"
-            readarray -t arrayFiles < $FILE_NAME
+            readarray -t arrayFiles < "$FILE_NAME"
         else 
-            echo "Error: file  $file_name doesn't exist - proceeding without ignore file"
+            echo "Error: file $FILE_NAME doesn't exist - proceeding without ignore file"
             (( ERRORS++ ))
         fi
         ;;
@@ -267,7 +204,7 @@ while getopts 'cr:hb:' opt; do
         ;;
     esac
 done
-shift "$(($OPTIND -1))"
+shift "$((OPTIND -1))"
 
 if [[ $# -ne 2 ]]; then
     echo "Error: invalid number of arguments"
@@ -275,34 +212,35 @@ if [[ $# -ne 2 ]]; then
     exit 1
 fi
 
-# argument variables
+# Argument variables
 working_dir=$1
 backup_dir=$2
 
-# check if working directory exists
+# Check if working directory exists
 if [[ ! -d $working_dir ]]; then
     echo "$working_dir is not a directory"
     exit 1
 fi
 
-backup_dir="${backup_dir%/}" # remove the trailing slash from the string
+# Remove trailing slash from the backup directory path
+backup_dir="${backup_dir%/}"
 
-
+# Convert relative backup_dir to absolute path if necessary
 if [[ ! "$backup_dir" =~ ^/ ]]; then
-    backup_dir="../$backup_dir"
+    backup_dir="$PWD/$backup_dir"
 fi
 
-# convert to absolute paths
+# Convert to absolute paths
 working_dir=$(cd "$working_dir" && pwd)
 backup_dir=$(cd "$(dirname "$backup_dir")" && pwd)/$(basename "$backup_dir")
 
-# check if backup directory is inside the working directory
+# Ensure backup directory is not within the working directory
 if [[ "$backup_dir" == "$working_dir"* ]]; then
     echo "Cannot do backup in the original directory"
     exit 1
 fi
 
-# check if backup directory exists, and create it if not
+# Create backup directory if it does not exist
 if [[ ! -d "$backup_dir" ]]; then
     echo "Creating backup directory: $backup_dir"
     if [[ "$CHECK" == false ]]; then
@@ -310,9 +248,7 @@ if [[ ! -d "$backup_dir" ]]; then
     fi
 fi
 
-backup_copy "$working_dir" "$backup_dir"
+# Perform the sync
+backup_sync "$working_dir" "$backup_dir" "$remove_all"
 
-backup_remove "$working_dir" "$backup_dir" "$remove_all"
-
-echo "While backuping $path: $ERRORS errors; $WARNINGS warnings; $UPDATES updated; $COPIES copied (${COPIES_SIZE}B); $DELETES deleted (${DELETES_SIZE}B)"
 echo "Backup finished!"
