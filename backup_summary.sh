@@ -52,13 +52,13 @@ backup_sync() {
     local working_dir=$1
     local backup_dir=$2
     local remove_all=$3
-    local local_ERRORS=0
-    local local_WARNINGS=0
-    local local_UPDATES=0
-    local local_COPIES=0
-    local local_COPIES_SIZE=0
-    local local_DELETES=0
-    local local_DELETES_SIZE=0
+    local ERRORS=0
+    local WARNINGS=0
+    local UPDATES=0
+    local COPIES=0
+    local COPIES_SIZE=0
+    local DELETES=0
+    local DELETES_SIZE=0
 
     # Ensure backup directory exists
     if [[ ! -d "$backup_dir" ]]; then
@@ -83,9 +83,10 @@ backup_sync() {
 
         # Check if path is a file
         if [[ -f "$path" ]]; then
+        
             # If the backup file exists and is newer, count a warning
             if [[ -f "$backup_dir/$basename" && "$backup_dir/$basename" -nt "$path" ]]; then
-                ((local_WARNINGS++))
+                ((WARNINGS++))
                 echo "WARNING: backup entry $backup_dir/$basename is newer than $path; this should not happen."
                 continue
             fi
@@ -95,21 +96,25 @@ backup_sync() {
                 continue
             fi
 
-            if [[ -f "$backup_dir/$basename" && "$path" -nt "$backup_dir/$basename" ]]; then
-                echo "cp -a $path $backup_dir"
-                if [[ "$CHECK" == false ]]; then
-                    cp -a "$path" "$backup_dir"
-                fi
-                ((local_UPDATES++))
-            elif [[ ! -f "$backup_dir/$basename" ]]; then
-                echo "cp -a $path $backup_dir"
-                if [[ "$CHECK" == false ]]; then
-                    cp -a "$path" "$backup_dir"
-                fi
-                ((local_COPIES++))
-                ((local_COPIES_SIZE += $(stat -c%s "$path")))  
+            # If file has no new changes, skip it
+            if [[ -f "$backup_dir/$basename" && ! "$path" -nt "$backup_dir/$basename" ]]; then
+                continue
             fi
-
+            
+            # if the file already existed in the backup, then it is an update
+            if [[ -f "$backup_dir/$basename"  ]]; then
+                ((UPDATES++))
+            # else, its being copied    
+            else
+                ((COPIES++))
+                ((COPIES_SIZE += $(stat -c%s "$path")))
+            fi
+            
+            # copying the file
+            echo "cp -a $path $backup_dir"
+            if [[ "$CHECK" == false ]]; then
+                cp -a "$path" "$backup_dir"
+            fi
 
         elif [[ -d "$path" ]]; then
             # Recursively sync the subdirectory
@@ -129,10 +134,10 @@ backup_sync() {
         if [[ ! -e "$working_dir/$basename" ]] \
         || is_ignorable "$basename" \
         || ! regex_matches "$basename" \
-        || [[ "$remove_all" == true ]]; then
+        || $remove_all; then
             if [[ -f "$backup_path" ]]; then
-                ((local_DELETES++))
-                ((local_DELETES_SIZE += $(stat -c%s "$backup_path")))
+                ((DELETES++))
+                ((DELETES_SIZE += $(stat -c%s "$backup_path")))
                 echo "rm $backup_path"
                 if [[ "$CHECK" == false ]]; then
                     rm "$backup_path"
@@ -147,15 +152,14 @@ backup_sync() {
                     if [[ "$CHECK" == false ]]; then
                         rmdir "$backup_dir/$basename"
                     fi
-                    ((local_DELETES++))
+                    ((DELETES++))
                 fi
             fi
         fi
     done
 
     # Print a single summary line for this directory level
-    echo "Summary for directory $working_dir:"
-    echo "Errors: $local_ERRORS, Warnings: $local_WARNINGS, Updates: $local_UPDATES, Copies: $local_COPIES (${local_COPIES_SIZE}B), Deletes: $local_DELETES (${local_DELETES_SIZE}B)"
+    echo "While backing up $working_dir: $ERRORS Errors; $WARNINGS Warnings; $UPDATES Updated; $COPIES Copied (${COPIES_SIZE}B); $DELETES Deleted (${DELETES_SIZE}B)"
 }
 
 
@@ -222,27 +226,23 @@ if [[ ! -d $working_dir ]]; then
     exit 1
 fi
 
-# Remove trailing slash from the backup directory path
+# Remove trailing slash from the directory paths
+working_dir="${working_dir%/}"
 backup_dir="${backup_dir%/}"
 
-# Convert relative backup_dir to absolute path if necessary
-if [[ ! "$backup_dir" =~ ^/ ]]; then
-    backup_dir="$PWD/$backup_dir"
-fi
-
-# Convert to absolute paths
-working_dir=$(cd "$working_dir" && pwd)
-backup_dir=$(cd "$(dirname "$backup_dir")" && pwd)/$(basename "$backup_dir")
+# Get absolute paths for more secure validation
+abs_working_dir=$(cd "$working_dir" && pwd)
+abs_backup_dir=$(cd "$(dirname "$backup_dir")" && pwd)/$(basename "$backup_dir")
 
 # Ensure backup directory is not within the working directory
-if [[ "$backup_dir" == "$working_dir"* ]]; then
-    echo "Cannot do backup in the original directory"
+if [[ "$abs_backup_dir" == "$abs_working_dir"* ]]; then
+    echo "Cannot do backup inside the original directory"
     exit 1
 fi
 
 # Create backup directory if it does not exist
 if [[ ! -d "$backup_dir" ]]; then
-    echo "Creating backup directory: $backup_dir"
+    echo "mkdir -p $backup_dir"
     if [[ "$CHECK" == false ]]; then
         mkdir -p "$backup_dir"
     fi
