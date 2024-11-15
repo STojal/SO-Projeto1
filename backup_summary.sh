@@ -40,7 +40,7 @@ regex_matches() {
 
     local path=$1
     local filename=$(basename "$path")
-    if [[ -z "$REGEX" || "$filename" =~ $REGEX ]]; then
+    if [[ -z "$REGEX" || "$filename" =~ $REGEX ]]; then     
         return 0  # matches regex
     fi
     return 1 # doesn't match regex
@@ -62,7 +62,7 @@ backup_sync() {
 
     # Ensure backup directory exists
     if [[ ! -d "$backup_dir" ]]; then
-        echo "Creating directory: $backup_dir"
+        echo "mkdir -p $backup_dir"
         if [[ "$CHECK" == false ]]; then
             mkdir -p "$backup_dir"
         fi
@@ -173,7 +173,7 @@ while getopts 'cr:hb:' opt; do
         ;;
     r)  
         REGEX="$OPTARG"
-        if ! [[ "" =~ $REGEX ]]; then
+        if echo "" | grep -E "$REGEX" >/dev/null 2>&1; then
             echo "Error: invalid regex, proceeding without regex."
             REGEX=""
             (( ERRORS++ ))
@@ -230,16 +230,6 @@ fi
 working_dir="${working_dir%/}"
 backup_dir="${backup_dir%/}"
 
-# Get absolute paths for more secure validation
-abs_working_dir=$(cd "$working_dir" && pwd)
-abs_backup_dir=$(cd "$(dirname "$backup_dir")" && pwd)/$(basename "$backup_dir")
-
-# Ensure backup directory is not within the working directory
-if [[ "$abs_backup_dir" == "$abs_working_dir"* ]]; then
-    echo "Cannot do backup inside the original directory"
-    exit 1
-fi
-
 # Create backup directory if it does not exist
 if [[ ! -d "$backup_dir" ]]; then
     echo "mkdir -p $backup_dir"
@@ -247,6 +237,15 @@ if [[ ! -d "$backup_dir" ]]; then
         mkdir -p "$backup_dir"
     fi
 fi
+
+# Ensure backup directory is not within the working directory
+if [[ "$backup_dir" == "$working_dir"* ]]; then
+    echo "Cannot do backup inside the original directory"
+    echo "rmdir $backup_dir"
+    [[ "$CHECK" == false ]] && rmdir "$backup_dir"
+    exit 1
+fi
+
 
 # Perform the sync
 backup_sync "$working_dir" "$backup_dir" "$remove_all"
