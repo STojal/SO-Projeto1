@@ -111,7 +111,7 @@ backup_sync() {
             fi
             
             # copying the file
-            echo "cp -a $path $backup_dir"
+            echo "cp -a $path $backup_dir/$basename"
             if [[ "$CHECK" == false ]]; then
                 cp -a "$path" "$backup_dir"
             fi
@@ -159,7 +159,7 @@ backup_sync() {
     done
 
     # Print a single summary line for this directory level
-    echo "While backing up $working_dir: $ERRORS Errors; $WARNINGS Warnings; $UPDATES Updated; $COPIES Copied (${COPIES_SIZE}B); $DELETES Deleted (${DELETES_SIZE}B)"
+    echo "While backuping $working_dir: $ERRORS Errors; $WARNINGS Warnings; $UPDATES Updated; $COPIES Copied (${COPIES_SIZE}B); $DELETES Deleted (${DELETES_SIZE}B)"
 }
 
 
@@ -249,5 +249,4 @@ fi
 
 # Perform the sync
 backup_sync "$working_dir" "$backup_dir" "$remove_all"
-
 
