@@ -219,5 +219,3 @@ fi
 
 # Perform the sync
 backup_sync "$working_dir" "$backup_dir" "$remove_all"
-
-echo "Backup finished!"
