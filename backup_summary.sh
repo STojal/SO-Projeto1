@@ -168,7 +168,9 @@ backup_sync() {
     done
 
     # Print a single summary line for this directory level
-    echo "While backuping $working_dir: $ERRORS Errors; $WARNINGS Warnings; $UPDATES Updated; $COPIES Copied (${COPIES_SIZE}B); $DELETES Deleted (${DELETES_SIZE}B)"
+    echo "While backuping $working_dir: \
+    $ERRORS Errors; $WARNINGS Warnings; $UPDATES Updated; \
+    $COPIES Copied (${COPIES_SIZE}B); $DELETES Deleted (${DELETES_SIZE}B)"
 }
 
 

@@ -9,20 +9,20 @@ backup_check(){
     # iterate the files in the backup directory
     for file in "$backup_dir"/*; do
 
-    filename=$(basename $file)
+        filename=$(basename $file)
 
-    if [[ -f "$file" && -f "$working_dir/$filename" ]]; then
-        if [[ "$(md5sum $file | cut -d ' ' -f1 )" != "$(md5sum $working_dir/$filename | cut -d ' ' -f1 )" ]]; then
-            echo "$file and $working_dir/$filename differ"
-            ((differences++))
+        if [[ -f "$file" && -f "$working_dir/$filename" ]]; then
+            if [[ "$(md5sum $file | cut -d ' ' -f1 )" != "$(md5sum $working_dir/$filename | cut -d ' ' -f1 )" ]]; then
+                echo "$file and $working_dir/$filename differ"
+                ((differences++))
+            fi
         fi
-    fi
 
-    if [[ -d "$file" && -d "$working_dir/$filename" ]]; then
-        backup_check "$file" "$working_dir/$filename"
-    fi
+        if [[ -d "$file" && -d "$working_dir/$filename" ]]; then
+            backup_check "$file" "$working_dir/$filename"
+        fi
 
-done
+    done
 }
 
 if [[ $# -ne 2 ]]; then
