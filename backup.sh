@@ -42,7 +42,6 @@ backup_sync() {
 
     local working_dir=$1
     local backup_dir=$2
-    local remove_all=$3
 
     # Ensure backup directory exists
     if [[ ! -d "$backup_dir" ]]; then
@@ -79,6 +78,12 @@ backup_sync() {
                 continue
             fi
 
+            # If file is not readable, skip it
+            if [[ ! -r "$path" ]]; then
+                echo "Error: file '$basename' is not readable"
+                continue
+            fi
+
             # If file has no new changes, skip it
             if [[ -f "$backup_dir/$basename" && ! "$path" -nt "$backup_dir/$basename" ]]; then
                 continue
@@ -91,6 +96,13 @@ backup_sync() {
             fi
 
         elif [[ -d "$path" ]]; then
+
+            # if directory is not traversable, skip it
+            if [[ ! -x "$path" ]]; then
+                echo "Error: Directory '$path' is not executable. Skipping."
+                continue
+            fi
+
             # Recursively sync the subdirectory
             backup_sync "$path" "$backup_dir/$basename" "$remove_all"
         fi
@@ -126,6 +138,9 @@ backup_sync() {
                     fi
                 fi
             fi
+        elif [[ -e "$working_dir/$basename" && ! -w "$backup_path" ]]; then
+            echo "Error: file $backup_path is not writeable"
+            continue
         fi
     done
 
