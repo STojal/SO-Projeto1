@@ -7,15 +7,6 @@ REGEX=""
 arrayFiles=()
 remove_all=false
 
-# warning global variables
-ERRORS=0
-WARNINGS=0
-UPDATES=0
-COPIES=0
-COPIES_SIZE=0
-DELETES=0
-DELETES_SIZE=0
-
 Help() {
     echo "Run this script to create a backup for a directory."
     echo "Syntax: ./backup.sh [-c] [-b tfile] [-r regexpr] working_dir backup_dir"
@@ -75,9 +66,16 @@ backup_sync() {
         fi
 
         local basename=$(basename "$path")
+
+        # If file is not readable, skip it
+        if [[ ! -r "$path" ]]; then
+            echo "Error: file '$basename' is not readable"
+            ((ERRORS++))
+            continue
+        fi
         
         # Skip if file is ignorable
-        if is_ignorable "$basename"; then
+        if is_ignorable "$path"; then
             continue
         fi
 
@@ -117,6 +115,13 @@ backup_sync() {
             fi
 
         elif [[ -d "$path" ]]; then
+
+            # if directory is not traversable, skip it
+            if [[ ! -x "$path" ]]; then
+                echo "Error: Directory '$path' is not executable. Skipping."
+                continue
+            fi
+
             # Recursively sync the subdirectory
             backup_sync "$path" "$backup_dir/$basename" "$remove_all"
         fi
@@ -138,7 +143,7 @@ backup_sync() {
             if [[ -f "$backup_path" ]]; then
                 ((DELETES++))
                 ((DELETES_SIZE += $(stat -c%s "$backup_path")))
-                echo "rm $backup_path"
+                # echo "rm $backup_path"
                 if [[ "$CHECK" == false ]]; then
                     rm "$backup_path"
                 fi
@@ -148,13 +153,17 @@ backup_sync() {
 
                 # Remove the directory if it no longer exists in working_dir
                 if [[ ! -d "$working_dir/$basename" || "$remove_all" == true ]]; then
-                    echo "rmdir $backup_dir/$basename"
+                    # echo "rmdir $backup_dir/$basename"
                     if [[ "$CHECK" == false ]]; then
                         rmdir "$backup_dir/$basename"
                     fi
                     ((DELETES++))
                 fi
             fi
+        elif [[ -e "$working_dir/$basename" && ! -w "$backup_path" ]]; then
+            echo "Error: file $backup_path is not writeable"
+            ((ERRORS++))
+            continue
         fi
     done
 
@@ -241,7 +250,7 @@ fi
 # Ensure backup directory is not within the working directory
 if [[ "$backup_dir" == "$working_dir"* ]]; then
     echo "Cannot do backup inside the original directory"
-    echo "rmdir $backup_dir"
+    # echo "rmdir $backup_dir"
     [[ "$CHECK" == false ]] && rmdir "$backup_dir"
     exit 1
 fi
